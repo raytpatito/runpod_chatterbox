@@ -29,7 +29,10 @@ def handler(event, responseFormat="base64"):
         # --- Prioridad: audio_url > audio_base64 > yt_url ---
         if audio_url:
             print(f"Descargando audio de referencia desde: {audio_url}")
-            resp = requests.get(audio_url, timeout=60)
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
+            }
+            resp = requests.get(audio_url, headers=headers, timeout=60)
             resp.raise_for_status()
             wav_file = "./my_audio/reference.wav"
             with open(wav_file, "wb") as f:

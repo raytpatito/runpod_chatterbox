@@ -5,6 +5,7 @@ import yt_dlp
 import os
 import tempfile
 import base64
+import requests
 import time
 from chatterbox.tts import ChatterboxTTS
 from pathlib import Path
@@ -14,14 +15,41 @@ output_filename = "output.wav"
 
 def handler(event, responseFormat="base64"):
     input = event['input']    
-    prompt = input.get('prompt')  
-    yt_url = input.get('yt_url')  
+    prompt = input.get('prompt')
+    audio_url = input.get('audio_url')
+    audio_base64_input = input.get('audio_base64')
+    yt_url = input.get('yt_url')
 
     print(f"New request. Prompt: {prompt}")
-    
+
+    os.makedirs("./my_audio", exist_ok=True)
+    wav_file = None
+
     try:
-        # Download audio from YT, cut at 60s by default
-        dl_info, wav_file = download_youtube_audio(yt_url, output_path="./my_audio", audio_format="wav")
+        # --- Prioridad: audio_url > audio_base64 > yt_url ---
+        if audio_url:
+            print(f"Descargando audio de referencia desde: {audio_url}")
+            resp = requests.get(audio_url, timeout=60)
+            resp.raise_for_status()
+            wav_file = "./my_audio/reference.wav"
+            with open(wav_file, "wb") as f:
+                f.write(resp.content)
+
+        elif audio_base64_input:
+            print("Usando audio de referencia enviado en base64")
+            wav_file = "./my_audio/reference.wav"
+            with open(wav_file, "wb") as f:
+                f.write(base64.b64decode(audio_base64_input))
+
+        elif yt_url:
+            print(f"Descargando audio de referencia desde YouTube: {yt_url}")
+            result = download_youtube_audio(yt_url, output_path="./my_audio", audio_format="wav")
+            if result is None:
+                return {"error": "No se pudo descargar el audio de YouTube (revisa el link o usa audio_url en su lugar)"}
+            dl_info, wav_file = result
+
+        else:
+            return {"error": "Necesitas mandar audio_url, audio_base64 o yt_url"}
 
         # Prompt Chatterbox
         audio_tensor = model.generate(
@@ -34,7 +62,7 @@ def handler(event, responseFormat="base64"):
 
     except Exception as e:
         print(f"An unexpected error occurred: {e}")
-        return f"{e}" 
+        return {"error": str(e)}
 
     # Convert to base64 string
     audio_base64 = audio_tensor_to_base64(audio_tensor, model.sr)
@@ -52,14 +80,15 @@ def handler(event, responseFormat="base64"):
     elif responseFormat == "binary":
         with open(output_filename, 'rb') as f:
             audio_data = base64.b64encode(f.read()).decode('utf-8')
-        
+
         # Clean up the file
         os.remove(output_filename)
-        
+
         response = audio_data  # Just return the base64 string
 
-    # Clean up temporary files
-    os.remove(wav_file)
+    # Clean up temporary files (solo si existe)
+    if wav_file and os.path.exists(wav_file):
+        os.remove(wav_file)
 
     return response 
 

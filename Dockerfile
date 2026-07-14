@@ -7,8 +7,7 @@ RUN apt-get update && apt-get install -y \
     curl \
     ffmpeg
 
-RUN python -m pip install --no-deps chatterbox-tts
-
+RUN python -m pip install chatterbox-tts
 WORKDIR /
 COPY requirements.txt /requirements.txt
 RUN pip install -r requirements.txt
